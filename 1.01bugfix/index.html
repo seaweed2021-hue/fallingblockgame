@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Untitled Falling Block Game</title>
+<style>
+html, body { margin:0; padding:0; overflow:hidden; background:#121212; font-family:sans-serif; }
+canvas { display:block; }
+#title { position:absolute; top:10px; width:100%; text-align:center; font-size:28px; font-weight:bold; color:white; text-shadow:1px 1px 3px black; }
+#shop { position:absolute; left:10px; top:80px; background:rgba(0,0,0,0.5); padding:10px; border-radius:8px; width:180px; color:white; }
+#shop button { margin-top:5px; padding:5px 10px; font-size:16px; width:100%; border:none; border-radius:5px; cursor:pointer; }
+#stats { position:absolute; right:10px; top:80px; background:rgba(0,0,0,0.5); padding:10px; border-radius:8px; width:200px; font-size:18px; color:white; }
+</style>
+</head>
+<body>
+
+<div id="title">Untitled Falling Block Game</div>
+
+<div id="shop">
+    <div>Shop (Coins):</div>
+    <button id="speedBtn">Increase Speed (+2) - 5 coins</button>
+    <button id="shieldBtn">Shield (1 life) - 10 coins</button>
+    <button id="hitboxBtn">Smaller Hitbox - 8 coins</button>
+</div>
+
+<div id="stats">
+    <div id="score">Score: 0</div>
+    <div id="coins">Coins: 0</div>
+    <div id="highscore">Highscore: 0</div>
+    <div id="timer">Time: 0.0s</div>
+    <div id="speedStat">Speed: 0</div>
+    <div id="shieldStat">Shields: 0</div>
+    <div id="hitboxStat">Hitbox: 1.0x</div>
+</div>
+
+<canvas id="gameCanvas"></canvas>
+<audio id="bgMusic" src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" loop autoplay></audio>
+
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+function resizeCanvas(){ canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+window.addEventListener("resize", resizeCanvas);
+resizeCanvas();
+
+// Player
+const player = {x:canvas.width/2-20, y:canvas.height-60, width:40, height:40, speed:6, shield:0, hitboxModifier:1};
+let keys = {};
+let obstacles = [], obstacleSpeed=4, spawnInterval=1000, lastSpawn=0;
+let score=0, coins=0, highscore=0, runTime=0;
+let particles=[], hue=0;
+
+// Upgrades
+const upgrades={speed:{cost:5,value:2},shield:{cost:10,value:1},hitbox:{cost:8,value:0.7}};
+
+// Keyboard
+document.addEventListener("keydown", e=>keys[e.key]=true);
+document.addEventListener("keyup", e=>keys[e.key]=false);
+
+// Shop
+document.getElementById("speedBtn").addEventListener("click",()=>buyUpgrade("speed"));
+document.getElementById("shieldBtn").addEventListener("click",()=>buyUpgrade("shield"));
+document.getElementById("hitboxBtn").addEventListener("click",()=>buyUpgrade("hitbox"));
+function buyUpgrade(type){
+    if(coins>=upgrades[type].cost){
+        coins-=upgrades[type].cost;
+        if(type==="speed") player.speed+=upgrades.speed.value;
+        if(type==="shield") player.shield+=upgrades.shield.value;
+        if(type==="hitbox") player.hitboxModifier*=upgrades.hitbox.value;
+        updateUI();
+    }
+}
+
+// Collision
+function isColliding(a,b){
+    if(!a||!b) return false;
+    const mod=a.hitboxModifier||1;
+    return !(a.x+a.width*mod<b.x || a.x>b.x+b.width || a.y+a.height*mod<b.y || a.y>b.y+b.height);
+}
+
+// Particles
+function createParticle(x,y){particles.push({x:x+player.width/2,y:y+player.height/2,alpha:1,size:Math.random()*5+2,speedX:(Math.random()-0.5)*2,speedY:(Math.random()-1)*2});}
+function drawParticles(){for(let i=particles.length-1;i>=0;i--){let p=particles[i];p.x+=p.speedX;p.y+=p.speedY;p.alpha-=0.02;ctx.fillStyle=`hsla(${hue},100%,60%,${p.alpha})`;ctx.beginPath();ctx.arc(p.x,p.y,p.size,0,Math.PI*2);ctx.fill();if(p.alpha<=0) particles.splice(i,1);}}
+let bgLines=[];for(let i=0;i<20;i++) bgLines.push({x:Math.random()*canvas.width,y:Math.random()*canvas.height,speed:Math.random()*1+0.5});
+function drawBackground(){ctx.fillStyle=`hsl(${hue},20%,10%)`;ctx.fillRect(0,0,canvas.width,canvas.height);ctx.strokeStyle=`hsl(${(hue+60)%360},80%,60%)`;ctx.lineWidth=2; bgLines.forEach(l=>{ctx.beginPath();ctx.moveTo(l.x,l.y);ctx.lineTo(l.x,l.y+20);ctx.stroke(); l.y+=l.speed;if(l.y>canvas.height)l.y=-20;}); hue=(hue+0.2)%360;}
+
+// UI
+function updateUI(){
+    document.getElementById("score").textContent="Score: "+score;
+    document.getElementById("coins").textContent="Coins: "+coins;
+    document.getElementById("highscore").textContent="Highscore: "+highscore;
+    document.getElementById("timer").textContent="Time: "+runTime.toFixed(1)+"s";
+    document.getElementById("speedStat").textContent="Speed: "+player.speed;
+    document.getElementById("shieldStat").textContent="Shields: "+player.shield;
+    document.getElementById("hitboxStat").textContent="Hitbox: "+player.hitboxModifier.toFixed(2)+"x";
+}
+
+// Spawn double obstacles safely
+function spawnObstacle() {
+    const maxTries = 10;
+    for(let i=0;i<2;i++){
+        let size = Math.random()*30+20;
+        let x, tries=0;
+        do {
+            x = Math.random()*(canvas.width-size);
+            tries++;
+        } while(obstacles.some(o=>Math.abs(o.x-x)<size+5) && tries<maxTries);
+        obstacles.push({x:x, y:-size, width:size, height:size});
+    }
+}
+
+// Draw
+function draw(){
+    drawBackground();
+    ctx.fillStyle=`hsl(${(hue+120)%360},100%,50%)`; 
+    ctx.fillRect(player.x,player.y,player.width*player.hitboxModifier,player.height*player.hitboxModifier);
+    ctx.fillStyle=`hsl(${(hue+240)%360},100%,50%)`; 
+    ctx.shadowColor="#FFAAAA"; ctx.shadowBlur=10;
+    obstacles.forEach(o=>ctx.fillRect(o.x,o.y,o.width,o.height)); 
+    ctx.shadowBlur=0;
+    drawParticles();
+}
+
+// Game Loop
+let lastTime=performance.now();
+function update(timestamp){
+    const delta=(timestamp-lastTime)/1000; lastTime=timestamp; runTime+=delta;
+
+    if(keys["ArrowLeft"]) player.x-=player.speed;
+    if(keys["ArrowRight"]) player.x+=player.speed;
+
+    if(timestamp-lastSpawn>spawnInterval){ spawnObstacle(); lastSpawn=timestamp; }
+
+    // Update obstacles safely (backwards loop)
+    for(let i=obstacles.length-1;i>=0;i--){
+        const obs=obstacles[i];
+        if(!obs) continue;
+        obs.y+=obstacleSpeed;
+
+        if(obs.y>canvas.height){ obstacles.splice(i,1); continue; }
+
+        if(isColliding(player,obs)){
+            if(player.shield>0){ player.shield--; obstacles.splice(i,1); }
+            else{
+                coins+=Math.floor(score/100);
+                highscore=Math.max(highscore,score);
+                obstacles=[]; // reset safely
+                player.x=canvas.width/2-player.width/2;
+                player.y=canvas.height-60;
+                score=0;
+                obstacleSpeed=4;
+                keys={};
+                runTime=0;
+            }
+        }
+    }
+
+    obstacleSpeed+=0.001; 
+    if(spawnInterval>400) spawnInterval-=0.05;
+
+    score+=1; updateUI(); createParticle(player.x,player.y);
+
+    [["speedBtn","speed"],["shieldBtn","shield"],["hitboxBtn","hitbox"]].forEach(([btnId,upg])=>{
+        const btn=document.getElementById(btnId);
+        if(coins>=upgrades[upg].cost){ btn.style.background="#00FFAA"; btn.style.color="#000"; }
+        else{ btn.style.background=""; btn.style.color="#fff"; }
+    });
+
+    draw(); requestAnimationFrame(update);
+}
+
+requestAnimationFrame(update);
+</script>
+</body>
+</html>
