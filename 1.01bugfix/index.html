@@ -34,7 +34,7 @@ canvas { display:block; }
 </div>
 
 <canvas id="gameCanvas"></canvas>
-<audio id="bgMusic" src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" loop autoplay></audio>
+<audio id="bgMusic" src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" loop muted></audio>
 
 <script>
 const canvas = document.getElementById("gameCanvas");
@@ -55,7 +55,12 @@ let particles=[], hue=0;
 const upgrades={speed:{cost:5,value:2},shield:{cost:10,value:1},hitbox:{cost:8,value:0.7}};
 
 // Keyboard
-document.addEventListener("keydown", e=>keys[e.key]=true);
+document.addEventListener("keydown", e=>{
+    keys[e.key]=true;
+    // Start music safely
+    const music = document.getElementById("bgMusic");
+    if(music.paused){ music.muted=false; music.play().catch(()=>{}); }
+});
 document.addEventListener("keyup", e=>keys[e.key]=false);
 
 // Shop
