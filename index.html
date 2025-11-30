@@ -1,296 +1,201 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Shadow Shift v1.3 — Two-World Platformer</title>
+<meta charset="UTF-8">
+<title>Untitled Falling Block Game</title>
 <style>
-  :root{--bg:#05060a;--panel:#07121a;--text:#dfeff3}
-  html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:Inter,Segoe UI,Roboto,Arial}
-  .wrap{max-width:1100px;margin:18px auto;padding:12px}
-  header{display:flex;align-items:center;gap:12px}
-  h1{margin:0;font-size:20px}
-  .menu{margin-top:12px;background:linear-gradient(180deg,#07121a,#031018);padding:12px;border-radius:10px}
-  button{background:#0e2932;color:var(--text);border:0;padding:8px 12px;border-radius:8px;cursor:pointer}
-  .row{display:flex;gap:10px;align-items:center;margin-top:8px}
-  #gameWrap{margin-top:12px;background:linear-gradient(180deg,#031021,#020712);border-radius:10px;padding:10px;position:relative}
-  canvas{display:block;width:100%;height:540px;border-radius:6px;background:transparent}
-  .hud{position:absolute;left:14px;top:14px;background:rgba(0,0,0,0.35);padding:6px 8px;border-radius:8px;font-size:13px}
-  .hudR{position:absolute;right:14px;top:14px;background:rgba(0,0,0,0.35);padding:6px 8px;border-radius:8px;font-size:13px}
-  .progressWrap{position:absolute;left:14px;right:14px;bottom:14px;height:12px;background:rgba(0,0,0,0.25);border-radius:10px}
-  .progress{height:100%;width:0;background:linear-gradient(90deg,#ffd166,#7dd3fc)}
-  .small{font-size:13px;color:#9fb0bb}
-  footer{margin-top:8px;font-size:12px;color:#94a8b0;text-align:right}
-  .panel{background:rgba(255,255,255,0.02);padding:10px;border-radius:8px}
+html, body { margin:0; padding:0; overflow:hidden; background:#121212; font-family:sans-serif; }
+canvas { display:block; }
+#title { position:absolute; top:10px; width:100%; text-align:center; font-size:28px; font-weight:bold; color:white; text-shadow:1px 1px 3px black; }
+#shop { position:absolute; left:10px; top:80px; background:rgba(0,0,0,0.5); padding:10px; border-radius:8px; width:180px; color:white; }
+#shop button { margin-top:5px; padding:5px 10px; font-size:16px; width:100%; border:none; border-radius:5px; cursor:pointer; }
+#stats { position:absolute; right:10px; top:80px; background:rgba(0,0,0,0.5); padding:10px; border-radius:8px; width:200px; font-size:18px; color:white; }
+#startBtn { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); padding:20px 40px; font-size:24px; cursor:pointer; border:none; border-radius:8px; background:#00FFAA; color:#000; }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <h1>Shadow Shift v1.3</h1>
-    <div class="small" style="margin-left:auto">Swap worlds — Light vs Shadow. Platforms are solid only in their world.</div>
-  </header>
 
-  <div class="menu panel">
-    <div class="row">
-      <button id="playBtn">Play</button>
-      <div style="margin-left:8px">
-        <label class="small">Level:
-          <select id="levelSelect">
-            <option value="1">1 — Training</option>
-            <option value="2">2 — Mirror Paths</option>
-            <option value="3">3 — Labyrinth</option>
-          </select>
-        </label>
-      </div>
-      <div style="margin-left:auto" class="row">
-        <button id="helpBtn">Help</button>
-        <button id="restartBtn">Restart</button>
-        <button id="pauseBtn">Pause</button>
-      </div>
-    </div>
-    <div class="row small" style="margin-top:8px">Controls: ← → / A D move • Space / ↑ jump • Shift to swap worlds • P pause • R restart</div>
-  </div>
-
-  <div id="gameWrap" class="panel">
-    <canvas id="c" width="1280" height="720"></canvas>
-    <div class="hud" id="hud">World: LIGHT</div>
-    <div class="hudR" id="hudR">Time: 0.00s</div>
-    <div class="progressWrap"><div class="progress" id="progress"></div></div>
-  </div>
-
-  <footer>Shadow Shift v1.3 — player floatier, coins auto above platforms, parallax background & particles</footer>
+<div id="title">Untitled Falling Block Game</div>
+<div id="shop">
+    <div>Shop (Coins):</div>
+    <button id="speedBtn">Increase Speed (+2) - 5 coins</button>
+    <button id="shieldBtn">Shield (1 life) - 10 coins</button>
+    <button id="hitboxBtn">Smaller Hitbox - 8 coins</button>
+</div>
+<div id="stats">
+    <div id="score">Score: 0</div>
+    <div id="coins">Coins: 0</div>
+    <div id="highscore">Highscore: 0</div>
+    <div id="timer">Time: 0.0s</div>
+    <div id="speedStat">Speed: 0</div>
+    <div id="shieldStat">Shields: 0</div>
+    <div id="hitboxStat">Hitbox: 1.0x</div>
 </div>
 
+<button id="startBtn">Start Game</button>
+<canvas id="gameCanvas"></canvas>
+<audio id="bgMusic" src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" loop></audio>
+
 <script>
-/* Shadow Shift v1.3 with coins, particles, and parallax background */
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+let gameStarted = false;
 
-const V_W = 1280, V_H = 720;
-const GRAV = 0.8;  // lower gravity
-const JUMP_V = -16;
-const MOVE_SPEED = 5.9;
-const LS_BEST = 'ss_v1_best';
+// Resize canvas
+function resizeCanvas(){ canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+window.addEventListener("resize", resizeCanvas);
+resizeCanvas();
 
-const LEVELS = {
-  1: {title:'Training', len:2800, backgroundLight:'#e6f6ff', backgroundShadow:'#0b1220',
-      platforms:[{x:200,y:520,w:360,h:40,world:'both'},{x:620,y:460,w:160,h:40,world:'light'},{x:820,y:520,w:260,h:40,world:'both'},{x:1180,y:480,w:140,h:40,world:'shadow'},{x:1380,y:520,w:300,h:40,world:'both'},{x:1800,y:520,w:400,h:40,world:'both'},{x:2300,y:480,w:200,h:40,world:'light'},{x:2500,y:520,w:300,h:40,world:'both'}],
-      spikes:[{x:560,y:560,w:40,h:40,world:'both'},{x:1540,y:560,w:40,h:40,world:'shadow'}]
-  },
-  2: {title:'Mirror Paths', len:4200, backgroundLight:'#fffbe6', backgroundShadow:'#070818',
-      platforms:[{x:160,y:520,w:240,h:40,world:'both'},{x:420,y:460,w:160,h:40,world:'light'},{x:620,y:600,w:160,h:40,world:'shadow'},{x:880,y:520,w:200,h:40,world:'both'},{x:1160,y:520,w:160,h:40,world:'shadow'},{x:1360,y:460,w:160,h:40,world:'light'},{x:1560,y:520,w:320,h:40,world:'both'},{x:1960,y:480,w:140,h:40,world:'light'},{x:2180,y:520,w:280,h:40,world:'both'},{x:2600,y:520,w:160,h:40,world:'shadow'},{x:2920,y:480,w:500,h:40,world:'both'},{x:3600,y:670,w:600,h:40,world:'both'}],
-      spikes:[{x:740,y:560,w:40,h:40,world:'light'},{x:2120,y:560,w:40,h:40,world:'shadow'},{x:2800,y:560,w:40,h:40,world:'both'}]
-  },
-  3: {title:'Labyrinth', len:6400, backgroundLight:'#fff2f0', backgroundShadow:'#03030a',
-      platforms:[{x:200,y:520,w:200,h:40,world:'both'},{x:460,y:520,w:200,h:40,world:'light'},{x:720,y:440,w:160,h:40,world:'shadow'},{x:920,y:520,w:240,h:40,world:'both'},{x:1260,y:520,w:220,h:40,world:'light'},{x:1520,y:460,w:180,h:40,world:'shadow'},{x:1740,y:520,w:300,h:40,world:'both'},{x:2120,y:480,w:160,h:40,world:'light'},{x:2380,y:440,w:160,h:40,world:'shadow'},{x:2680,y:520,w:240,h:40,world:'both'},{x:3040,y:520,w:200,h:40,world:'shadow'},{x:3320,y:460,w:160,h:40,world:'light'},{x:3560,y:520,w:400,h:40,world:'both'},{x:4080,y:520,w:300,h:40,world:'shadow'},{x:4440,y:480,w:160,h:40,world:'light'},{x:4700,y:520,w:170,h:40,world:'both'},{x:5000,y:440,w:260,h:40,world:'shadow'},{x:5360,y:520,w:1040,h:40,world:'both'}],
-      spikes:[{x:620,y:560,w:40,h:40,world:'light'},{x:1360,y:560,w:40,h:40,world:'shadow'},{x:2260,y:560,w:40,h:40,world:'both'},{x:3180,y:560,w:40,h:40,world:'light'},{x:4200,y:560,w:40,h:40,world:'shadow'}]
-  }
-};
+// Game variables
+let player, keys, obstacles, obstacleSpeed, spawnInterval, lastSpawn;
+let score, coins, highscore, runTime;
+let particles, hue;
+const upgrades = {speed:{cost:5,value:2},shield:{cost:10,value:1},hitbox:{cost:8,value:0.7}};
 
-const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
-function resize(){ canvas.width=V_W; canvas.height=V_H; }
-window.addEventListener('resize',resize); resize();
+// UI elements
+const startBtn = document.getElementById("startBtn");
+const bgMusic = document.getElementById("bgMusic");
 
-let curLevel=1, levelObj=LEVELS[curLevel], player=null, camX=0, worldMode='light';
-let running=false, paused=false, completed=false, keys={}, jumping=false;
-let startTime=0, elapsed=0, best=JSON.parse(localStorage.getItem(LS_BEST)||'{}');
+// Shop buttons
+document.getElementById("speedBtn").addEventListener("click",()=>buyUpgrade("speed"));
+document.getElementById("shieldBtn").addEventListener("click",()=>buyUpgrade("shield"));
+document.getElementById("hitboxBtn").addEventListener("click",()=>buyUpgrade("hitbox"));
 
-/* ---------- Audio ---------- */
-let audioCtx=null,audioReady=false;
-function ensureAudio(){ if(audioReady) return; try{ audioCtx=new (window.AudioContext||window.webkitAudioContext)(); audioReady=true; }catch(e){ audioReady=false; } }
-function beep(freq=440,d=0.06,vol=0.04){ if(!audioReady) return; const o=audioCtx.createOscillator(),g=audioCtx.createGain(); o.type='sine'; o.frequency.value=freq; g.gain.value=vol; o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime+d); }
-
-/* ---------- Player & Level ---------- */
-function createPlayerAt(x,y){ return {x:x,y:y,w:40,h:40,vx:0,vy:0,onGround:false}; }
-function settlePlayerAtStart(){
-  const p=levelObj.platforms.find(pl=>(pl.world==='both'||pl.world==='light'));
-  if(p){ player=createPlayerAt(p.x+Math.max(8,Math.floor((p.w-40)/2)),p.y-40); player.vy=0; player.onGround=true; camX=Math.max(0,player.x-200); return; }
-  player=createPlayerAt(160, V_H-120); player.vy=0; player.onGround=false; camX=0;
-}
-
-function spawnCoinsAbovePlatforms(){
-  levelObj.coins=[];
-  for(const p of levelObj.platforms){
-    if(p.world==='both'||p.world===worldMode){
-      levelObj.coins.push({x:p.x+p.w/2-15,y:p.y-35, collected:false, offset:Math.random()*Math.PI*2});
-    }
-  }
-}
-
-function loadLevel(n){
-  curLevel=n;
-  levelObj=LEVELS[n] || LEVELS[1];
-  levelObj.platforms=JSON.parse(JSON.stringify(levelObj.platforms||[]));
-  levelObj.spikes=JSON.parse(JSON.stringify(levelObj.spikes||[]));
-  worldMode='light';
-  settlePlayerAtStart();
-  spawnCoinsAbovePlatforms();
-  running=true; paused=false; completed=false;
-  startTime=now(); elapsed=0;
-  updateHUD(); updateProgress(0);
-}
-
-/* ---------- Input ---------- */
-window.addEventListener('keydown',(e)=>{
-  if(e.code==='ArrowLeft'||e.key==='a'||e.key==='A') keys.left=true;
-  if(e.code==='ArrowRight'||e.key==='d'||e.key==='D') keys.right=true;
-  if(e.code==='Space'||e.code==='ArrowUp'){ keys.jump=true; jumping=true; e.preventDefault(); }
-  if(e.key==='Shift') swapWorld();
-  if(e.key==='r'||e.key==='R') restartLevel();
-  if(e.key==='p'||e.key==='P') togglePause();
+// Start game safely
+startBtn.addEventListener("click",()=>{
+    startBtn.style.display = "none";
+    initGame();
+    bgMusic.play().catch(()=>{});
+    requestAnimationFrame(update);
 });
-window.addEventListener('keyup',(e)=>{
-  if(e.code==='ArrowLeft'||e.key==='a'||e.key==='A') keys.left=false;
-  if(e.code==='ArrowRight'||e.key==='d'||e.key==='D') keys.right=false;
-  if(e.code==='Space'||e.code==='ArrowUp'){ keys.jump=false; jumping=false; }
-});
-canvas.addEventListener('pointerdown',()=>{ ensureAudio(); if(audioCtx && audioCtx.state==='suspended') audioCtx.resume(); beep(660,0.04,0.04); });
 
-/* ---------- Swap & HUD ---------- */
-function swapWorld(){ worldMode=(worldMode==='light')?'shadow':'light'; updateHUD(); beep(worldMode==='light'?880:460,0.06,0.05); }
-const hud=document.getElementById('hud'), hudR=document.getElementById('hudR'), progressEl=document.getElementById('progress');
-function updateHUD(){ hud.textContent=`World: ${worldMode.toUpperCase()} — ${levelObj.title}`; }
-function updateProgress(p){ progressEl.style.width=(p*100)+'%'; }
-
-/* ---------- Collisions ---------- */
-function aabb(ax,ay,aw,ah,bx,by,bw,bh){ return ax<bx+bw && ax+aw>bx && ay<by+bh && ay+ah>by; }
-
-/* ---------- Particles ---------- */
-let particles=[];
-function spawnParticle(x,y,type){ particles.push({x,y,vx:(Math.random()-0.5)*2,vy:(Math.random()-1.5)*2,life:30+Math.random()*20,color:type==='coin'?'#ffd166':'#7dd3fc'}); }
-function updateParticles(){ for(let i=particles.length-1;i>=0;i--){ const p=particles[i]; p.x+=p.vx; p.y+=p.vy; p.vy+=0.08; p.life--; if(p.life<=0) particles.splice(i,1); } }
-function drawParticles(){ for(const p of particles){ ctx.fillStyle=p.color; ctx.fillRect(p.x,p.y,4,4); } }
-
-/* ---------- Loop ---------- */
-let last=now();
-function loop(){
-  const t=now(), dt=clamp(t-last,0,40); last=t;
-  if(running && !paused && !completed){ step(dt/16); elapsed=(now()-startTime)/1000; hudR.textContent=`Time: ${elapsed.toFixed(2)}s`; }
-  render();
-  requestAnimationFrame(loop);
+// Initialize game variables
+function initGame(){
+    gameStarted = true;
+    player = {x:canvas.width/2-20, y:canvas.height-60, width:40, height:40, speed:6, shield:0, hitboxModifier:1};
+    keys = {};
+    obstacles = [];
+    obstacleSpeed = 4;
+    spawnInterval = 1000;
+    lastSpawn = 0;
+    score = 0;
+    coins = 0;
+    runTime = 0;
+    particles = [];
+    hue = 0;
 }
 
-/* ---------- Physics Step ---------- */
-function step(delta){
-  let mv=0;
-  if(keys.left) mv-=1;
-  if(keys.right) mv+=1;
-  player.x+=mv*MOVE_SPEED*delta;
-  if(keys.jump && player.onGround){ player.vy=JUMP_V; player.onGround=false; beep(880,0.03,0.03); spawnParticle(player.x+20,player.y+40,'jump'); }
-  player.vy+=GRAV*delta; player.y+=player.vy*delta;
+// Keyboard
+document.addEventListener("keydown", e=>{ if(!gameStarted) return; keys[e.key]=true; });
+document.addEventListener("keyup", e=>{ if(!gameStarted) return; keys[e.key]=false; });
 
-  const targetCam=clamp(player.x-200,0,(levelObj.len||V_W)-V_W+200);
-  camX+=(targetCam-camX)*0.2;
+// Collision detection
+function isColliding(a,b){
+    if(!a||!b) return false;
+    const mod = a.hitboxModifier||1;
+    return !(a.x+a.width*mod<b.x || a.x>b.x+b.width || a.y+a.height*mod<b.y || a.y>b.y+b.height);
+}
 
-  player.onGround=false;
-  for(const p of levelObj.platforms){
-    const solid=(p.world==='both')||(p.world===worldMode);
-    if(!solid) continue;
-    if(aabb(player.x,player.y,player.w,player.h,p.x,p.y,p.w,p.h)){
-      const prevBottom=player.y-player.vy*delta+player.h;
-      if(player.vy>=0 && prevBottom<=p.y+6){ player.y=p.y-player.h; player.vy=0; player.onGround=true; }
-      else{ restartLevel(); return; }
+// Particles
+function createParticle(x,y){particles.push({x:x+player.width/2,y:y+player.height/2,alpha:1,size:Math.random()*5+2,speedX:(Math.random()-0.5)*2,speedY:(Math.random()-1)*2});}
+function drawParticles(){for(let i=particles.length-1;i>=0;i--){let p=particles[i];p.x+=p.speedX;p.y+=p.speedY;p.alpha-=0.02;ctx.fillStyle=`hsla(${hue},100%,60%,${p.alpha})`;ctx.beginPath();ctx.arc(p.x,p.y,p.size,0,Math.PI*2);ctx.fill();if(p.alpha<=0) particles.splice(i,1);}}
+
+// Background
+let bgLines=[];
+for(let i=0;i<20;i++) bgLines.push({x:Math.random()*canvas.width,y:Math.random()*canvas.height,speed:Math.random()*1+0.5});
+function drawBackground(){ctx.fillStyle=`hsl(${hue},20%,10%)`;ctx.fillRect(0,0,canvas.width,canvas.height);ctx.strokeStyle=`hsl(${(hue+60)%360},80%,60%)`;ctx.lineWidth=2; bgLines.forEach(l=>{ctx.beginPath();ctx.moveTo(l.x,l.y);ctx.lineTo(l.x,l.y+20);ctx.stroke(); l.y+=l.speed;if(l.y>canvas.height)l.y=-20;}); hue=(hue+0.2)%360;}
+
+// UI update
+function updateUI(){
+    document.getElementById("score").textContent="Score: "+score;
+    document.getElementById("coins").textContent="Coins: "+coins;
+    document.getElementById("highscore").textContent="Highscore: "+highscore;
+    document.getElementById("timer").textContent="Time: "+runTime.toFixed(1)+"s";
+    document.getElementById("speedStat").textContent="Speed: "+player.speed;
+    document.getElementById("shieldStat").textContent="Shields: "+player.shield;
+    document.getElementById("hitboxStat").textContent="Hitbox: "+player.hitboxModifier.toFixed(2)+"x";
+}
+
+// Shop upgrade
+function buyUpgrade(type){
+    if(coins>=upgrades[type].cost){
+        coins-=upgrades[type].cost;
+        if(type==="speed") player.speed+=upgrades.speed.value;
+        if(type==="shield") player.shield+=upgrades.shield.value;
+        if(type==="hitbox") player.hitboxModifier*=upgrades.hitbox.value;
+        updateUI();
     }
-  }
+}
 
-  for(const s of levelObj.spikes){
-    const active=(s.world==='both')||(s.world===worldMode);
-    if(!active) continue;
-    if(aabb(player.x,player.y,player.w,player.h,s.x,s.y,s.w,s.h)){ beep(160,0.12,0.07); restartLevel(); return; }
-  }
-
-  for(const c of levelObj.coins){
-    if(!c.collected && aabb(player.x,player.y,player.w,player.h,c.x,c.y,30,30)){
-      c.collected=true; beep(1000,0.05,0.05); spawnParticle(c.x+15,c.y+15,'coin');
+// Spawn obstacles safely
+function spawnObstacle() {
+    const maxTries = 10;
+    for(let i=0;i<2;i++){
+        let size = Math.random()*30+20;
+        let x, tries=0;
+        do { x = Math.random()*(canvas.width-size); tries++; }
+        while(obstacles.some(o=>Math.abs(o.x-x)<size+5) && tries<maxTries);
+        obstacles.push({x:x, y:-size, width:size, height:size});
     }
-  }
-
-  if(player.y>V_H+200){ restartLevel(); return; }
-  updateParticles();
-
-  const prog=clamp(player.x/(levelObj.len-40),0,1); updateProgress(prog);
-  if(player.x>=(levelObj.len-80)){
-    running=false; completed=true;
-    const bestTime=best[curLevel]||Infinity;
-    if(elapsed<bestTime){ best[curLevel]=elapsed; try{ localStorage.setItem(LS_BEST,JSON.stringify(best)); }catch(e){} }
-    beep(1200,0.08,0.06); alert('Level Complete! Time: '+elapsed.toFixed(2)+'s');
-  }
 }
 
-/* ---------- Render ---------- */
-function render(){
-  // parallax background
-  ctx.fillStyle=(worldMode==='light')?levelObj.backgroundLight:levelObj.backgroundShadow;
-  ctx.fillRect(0,0,V_W,V_H);
-  for(let i=0;i<6;i++){
-    ctx.fillStyle=(worldMode==='light')?`rgba(255,255,255,${0.02*i})`:`rgba(255,255,255,${0.01*i})`;
-    ctx.beginPath();
-    ctx.arc((i*300 - camX*0.2)%V_W, 100+i*60, 60-i*5, 0, Math.PI*2);
-    ctx.fill();
-  }
-
-  ctx.save(); ctx.translate(-camX,0);
-
-  // platforms
-  for(const p of levelObj.platforms){
-    const solid=(p.world==='both')||(p.world===worldMode);
-    ctx.fillStyle=solid?'#7dd3fc':'rgba(125,211,252,0.1)';
-    ctx.fillRect(p.x,p.y,p.w,p.h);
-  }
-
-  // spikes
-  for(const s of levelObj.spikes){
-    const active=(s.world==='both')||(s.world===worldMode);
-    if(!active) continue;
-    ctx.fillStyle='#fc7d7d';
-    ctx.beginPath();
-    ctx.moveTo(s.x,s.y+s.h);
-    ctx.lineTo(s.x+s.w/2,s.y);
-    ctx.lineTo(s.x+s.w,s.y+s.h);
-    ctx.closePath();
-    ctx.fill();
-  }
-
-  // coins
-  for(const c of levelObj.coins){
-    if(c.collected) continue;
-    const bounce=Math.sin(now()/250 + c.offset)*5;
-    ctx.fillStyle='#ffd166';
-    ctx.beginPath();
-    ctx.arc(c.x+15, c.y+15+bounce,12,0,Math.PI*2);
-    ctx.fill();
-    ctx.strokeStyle='rgba(0,0,0,0.2)'; ctx.stroke();
-  }
-
-  // player
-  ctx.fillStyle='#7dd3fc';
-  ctx.fillRect(player.x,player.y,player.w,player.h);
-
-  drawParticles();
-  ctx.restore();
+// Draw game
+function draw(){
+    drawBackground();
+    ctx.fillStyle=`hsl(${(hue+120)%360},100%,50%)`;
+    ctx.fillRect(player.x,player.y,player.width*player.hitboxModifier,player.height*player.hitboxModifier);
+    ctx.fillStyle=`hsl(${(hue+240)%360},100%,50%)`;
+    ctx.shadowColor="#FFAAAA"; ctx.shadowBlur=10;
+    obstacles.forEach(o=>{ if(o) ctx.fillRect(o.x,o.y,o.width,o.height); });
+    ctx.shadowBlur=0;
+    drawParticles();
 }
 
-/* ---------- Utils ---------- */
-function now(){ return performance.now(); }
-function clamp(v,min,max){ return Math.max(min,Math.min(max,v)); }
+// Game loop
+let lastTime = performance.now();
+function update(timestamp){
+    if(!gameStarted) return;
+    const delta = (timestamp-lastTime)/1000; lastTime = timestamp; runTime+=delta;
 
-/* ---------- Controls ---------- */
-function togglePause(){ paused=!paused; document.getElementById('pauseBtn').textContent=paused?'Resume':'Pause'; if(!paused) startTime=now()-elapsed*1000; }
-function restartLevel(){ loadLevel(curLevel); }
+    if(keys["ArrowLeft"]) player.x -= player.speed;
+    if(keys["ArrowRight"]) player.x += player.speed;
 
-/* ---------- UI Listeners ---------- */
-document.getElementById('playBtn').addEventListener('click',()=>loadLevel(+document.getElementById('levelSelect').value));
-document.getElementById('helpBtn').addEventListener('click',()=>alert('Shift to swap worlds. Only platforms in the active world are solid.\nUse ← → to move, Space to jump. P pause • R restart.'));
-document.getElementById('restartBtn').addEventListener('click',()=>restartLevel());
-document.getElementById('pauseBtn').addEventListener('click',()=>togglePause());
-document.getElementById('levelSelect').addEventListener('change',(e)=>loadLevel(+e.target.value));
+    if(timestamp-lastSpawn>spawnInterval){ spawnObstacle(); lastSpawn=timestamp; }
 
-/* ---------- Boot ---------- */
-loadLevel(1);
-last=now();
-requestAnimationFrame(loop);
+    // Update obstacles backwards
+    for(let i=obstacles.length-1;i>=0;i--){
+        const obs = obstacles[i];
+        if(!obs) continue;
+        obs.y += obstacleSpeed;
 
-/* ---------- Defensive saving ---------- */
-window.addEventListener('beforeunload',()=>{ try{ localStorage.setItem(LS_BEST,JSON.stringify(best)); }catch(e){} });
+        if(obs.y>canvas.height){ obstacles.splice(i,1); continue; }
+
+        if(isColliding(player,obs)){
+            if(player.shield>0){ player.shield--; obstacles.splice(i,1); }
+            else{
+                coins+=Math.floor(score/100);
+                highscore=Math.max(highscore,score);
+                obstacles=[];
+                player.x = canvas.width/2-player.width/2;
+                player.y = canvas.height-60;
+                score=0; obstacleSpeed=4; keys={}; runTime=0;
+            }
+        }
+    }
+
+    obstacleSpeed+=0.001; 
+    if(spawnInterval>400) spawnInterval-=0.05;
+
+    score+=1; updateUI(); createParticle(player.x,player.y);
+
+    [["speedBtn","speed"],["shieldBtn","shield"],["hitboxBtn","hitbox"]].forEach(([btnId,upg])=>{
+        const btn=document.getElementById(btnId);
+        if(coins>=upgrades[upg].cost){ btn.style.background="#00FFAA"; btn.style.color="#000"; }
+        else{ btn.style.background=""; btn.style.color="#fff"; }
+    });
+
+    draw(); requestAnimationFrame(update);
+}
 </script>
 </body>
 </html>
